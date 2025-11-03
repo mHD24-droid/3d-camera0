@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple AR Multi Model</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    video { 
+      position: fixed; 
+      top: 0; left: 0; 
+      width: 100vw; 
+      height: 100vh; 
+      object-fit: cover; 
+      z-index: -1;
+    }
+    #ui {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <video id="camera" autoplay playsinline></video>
+  <div id="ui">
+    <button id="addModel">➕ Add Model</button>
+    <button id="moveForward">⬆️ Forward</button>
+    <button id="moveBack">⬇️ Back</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/loaders/GLTFLoader.js';
+
+    // 🎥 تشغيل الكاميرا الخلفية
+    const video = document.getElementById('camera');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => alert('Camera access denied: ' + err));
+
+    // 🎬 إنشاء المشهد
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // 💡 إضاءة
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
+    scene.add(light);
+
+    // 📦 تحميل النماذج
+    const loader = new GLTFLoader();
+    const models = [];
+    let currentZ = -3; // المسافة من الكاميرا
+
+    function addModel() {
+      loader.load('https://modelviewer.dev/shared-assets/models/Astronaut.glb', (gltf) => {
+        const model = gltf.scene;
+        model.scale.set(0.5, 0.5, 0.5);
+        model.position.set(0, -1, currentZ);
+        scene.add(model);
+        models.push(model);
+      });
+    }
+
+    // أول نموذج عند البدء
+    addModel();
+
+    // 🔘 الأزرار
+    document.getElementById('addModel').addEventListener('click', () => {
+      currentZ -= 1.5; // إبعاد النموذج الجديد قليلًا
+      addModel();
+    });
+
+    document.getElementById('moveForward').addEventListener('click', () => {
+      models.forEach(m => m.position.z += 0.3);
+    });
+
+    document.getElementById('moveBack').addEventListener('click', () => {
+      models.forEach(m => m.position.z -= 0.3);
+    });
+
+    // 🔁 حلقة التحديث
+    function animate() {
+      requestAnimationFrame(animate);
+      models.forEach(m => m.rotation.y += 0.01);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
