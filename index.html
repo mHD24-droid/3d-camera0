@@ -7,102 +7,89 @@
     <style>
       /* الستايلات كما هي */
       body { margin: 0; overflow: hidden; background: black; color: white; }
-      /* تأكد أن الفيديو يغطي الشاشة بالكامل */
       video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: -1; }
-      /* تحريك واجهة المستخدم للأزرار */
       #ui { position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 10; }
       button { background: rgba(0,0,0,0.6); color: white; border: none; padding: 10px 15px; border-radius: 10px; font-size: 16px; }
-      /* صندوق السجل في الزاوية */
       #log { position: fixed; top: 10px; left: 10px; font-size: 14px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 5px; z-index: 20; }
     </style>
+    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/loaders/GLTFLoader.js"></script>
+    
   </head>
   <body>
     <video id="camera" autoplay playsinline></video>
-    <div id="log">جارٍ التهيئة...</div>
+    <div id="log">جار التهيئة...</div>
     
     <div id="ui">
       <button id="addModel" disabled>إضافة نموذج</button>
     </div>
 
-    <script type="module">
-      // استيراد مكتبات Three.js
-      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js';
-      import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/loaders/GLTFLoader.js';
-
-      // دالة لتحديث صندوق السجل
+    <script>
+      // لاحظ: الآن THREE و GLTFLoader متاحان مباشرة كمتغيرات عامة
+      
       const log = msg => document.getElementById('log').innerText = msg;
       
       const video = document.getElementById('camera');
       const addModelButton = document.getElementById('addModel');
       
-      // متغيرات المشهد العالمي
       let scene, camera, renderer, gltfModel = null;
       let modelLoaded = false;
       
-      // 1. بدء الكاميرا باستخدام طلب مرن (إما الأمامية أو الخلفية)
-   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    .then(stream => {
-        log("✅ الكاميرا الخلفية بدأت");
-        video.srcObject = stream;
-        setupScene();
-    })
-    .catch(err => {
-        // محاولة استخدام الكاميرا الأمامية أو أي كاميرا متاحة كخطة بديلة
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                log("⚠️ فشل في الخلفية. تم استخدام الكاميرا الأمامية.");
-                video.srcObject = stream;
-                setupScene();
-            })
-            .catch(err2 => {
-                log("❌ خطأ في الكاميرا: " + err2.name + ". لم يتم العثور على كاميرا.");
-            });
-    });
-          // بعد بدء الكاميرا، نبدأ إعداد مشهد Three.js
-          setupScene();
+      // 1. بدء الكاميرا مع خطة بديلة
+      // (استخدام الكود المعدل الذي يعطي خطة بديلة لضمان الكاميرا الخلفية)
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+            log("✅ الكاميرا الخلفية بدأت");
+            video.srcObject = stream;
+            setupScene();
         })
         .catch(err => {
-          log("❌ خطأ في الكاميرا: تأكد من الأذونات. " + err.name);
+            // الخطة البديلة: محاولة استخدام الكاميرا الأمامية
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    log("⚠️ فشل في الخلفية. تم استخدام الكاميرا الأمامية.");
+                    video.srcObject = stream;
+                    setupScene();
+                })
+                .catch(err2 => {
+                    log("❌ خطأ حرج: لا يمكن الوصول للكاميرا. " + err2.name);
+                });
         });
 
-      // 2. إعداد مشهد Three.js (المرئي فوق الكاميرا)
+      // 2. إعداد مشهد Three.js
       function setupScene() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
         
-        // استخدم 'alpha: true' لجعل الخلفية شفافة لرؤية الكاميرا
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // إضافة إضاءة إلى المشهد
         const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
         scene.add(light);
         
-        // تحميل النموذج ثلاثي الأبعاد
         loadModel();
-
-        // بدء حلقة الرسوم المتحركة الأساسية
         animate();
       }
       
       // 3. تحميل نموذج GLTF
       function loadModel() {
         log("⏳ جارٍ تحميل النموذج...");
-        const loader = new GLTFLoader();
+        // استخدام GLTFLoader مباشرة
+        const loader = new GLTFLoader(); 
         
-        // استخدام نموذج Astronaut المعروف
         loader.load('https://modelviewer.dev/shared-assets/models/Astronaut.glb',
           gltf => {
-            gltfModel = gltf.scene; // حفظ النموذج في متغير عام
+            gltfModel = gltf.scene; 
             gltfModel.scale.set(0.5, 0.5, 0.5);
-            gltfModel.position.set(0, -1, -5); // وضعه بعيدًا مؤقتًا
+            gltfModel.position.set(0, -1, -5); 
             
             log("✅ النموذج جاهز. انقر لإضافته!");
             modelLoaded = true;
-            addModelButton.disabled = false; // تفعيل الزر
+            addModelButton.disabled = false; 
           },
-          // دالة التقدم (اختياري)
+          // دالة التقدم
           xhr => {
             const percent = Math.round(xhr.loaded / xhr.total * 100);
             log(`⏳ جارٍ تحميل النموذج... ${percent}%`);
@@ -114,20 +101,18 @@
         );
       }
       
-      // 4. حلقة الرسوم المتحركة (렌더링)
+      // 4. حلقة الرسوم المتحركة
       function animate() {
         requestAnimationFrame(animate);
         
-        // إذا كان النموذج موجودًا في المشهد، اجعله يدور
         if (gltfModel && gltfModel.parent === scene) {
             gltfModel.rotation.y += 0.01;
         }
         
-        // عرض المشهد
         renderer.render(scene, camera);
       }
 
-      // 5. وظيفة الزر لإضافة النموذج
+      // 5. وظيفة الزر
       addModelButton.addEventListener('click', () => {
           if (gltfModel && gltfModel.parent !== scene) {
               scene.add(gltfModel);
@@ -151,4 +136,3 @@
     </script>
   </body>
 </html>
-
