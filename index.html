@@ -40,10 +40,24 @@
       let modelLoaded = false;
       
       // 1. بدء الكاميرا باستخدام طلب مرن (إما الأمامية أو الخلفية)
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          log("✅ الكاميرا بدأت");
-          video.srcObject = stream;
+   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+        log("✅ الكاميرا الخلفية بدأت");
+        video.srcObject = stream;
+        setupScene();
+    })
+    .catch(err => {
+        // محاولة استخدام الكاميرا الأمامية أو أي كاميرا متاحة كخطة بديلة
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                log("⚠️ فشل في الخلفية. تم استخدام الكاميرا الأمامية.");
+                video.srcObject = stream;
+                setupScene();
+            })
+            .catch(err2 => {
+                log("❌ خطأ في الكاميرا: " + err2.name + ". لم يتم العثور على كاميرا.");
+            });
+    });
           // بعد بدء الكاميرا، نبدأ إعداد مشهد Three.js
           setupScene();
         })
@@ -137,3 +151,4 @@
     </script>
   </body>
 </html>
+
