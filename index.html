@@ -3,48 +3,137 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AR Debug v2</title>
+    <title>Simple Camera AR Debug</title>
     <style>
+      /* الستايلات كما هي */
       body { margin: 0; overflow: hidden; background: black; color: white; }
-      #log {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        font-size: 16px;
-        background: rgba(0,0,0,0.7);
-        padding: 8px 12px;
-        border-radius: 8px;
-      }
+      /* تأكد أن الفيديو يغطي الشاشة بالكامل */
+      video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: -1; }
+      /* تحريك واجهة المستخدم للأزرار */
+      #ui { position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 10; }
+      button { background: rgba(0,0,0,0.6); color: white; border: none; padding: 10px 15px; border-radius: 10px; font-size: 16px; }
+      /* صندوق السجل في الزاوية */
+      #log { position: fixed; top: 10px; left: 10px; font-size: 14px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 5px; z-index: 20; }
     </style>
   </head>
   <body>
-    <div id="log">⏳ Loading script...</div>
+    <video id="camera" autoplay playsinline></video>
+    <div id="log">جارٍ التهيئة...</div>
+    
+    <div id="ui">
+      <button id="addModel" disabled>إضافة نموذج</button>
+    </div>
+
     <script type="module">
-      const logBox = document.getElementById('log');
-      const log = msg => logBox.innerText = msg;
+      // استيراد مكتبات Three.js
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js';
+      import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/loaders/GLTFLoader.js';
 
-      try {
-        log("✅ JS loaded correctly");
+      // دالة لتحديث صندوق السجل
+      const log = msg => document.getElementById('log').innerText = msg;
+      
+      const video = document.getElementById('camera');
+      const addModelButton = document.getElementById('addModel');
+      
+      // متغيرات المشهد العالمي
+      let scene, camera, renderer, gltfModel = null;
+      let modelLoaded = false;
+      
+      // 1. بدء الكاميرا باستخدام طلب مرن (إما الأمامية أو الخلفية)
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          log("✅ الكاميرا بدأت");
+          video.srcObject = stream;
+          // بعد بدء الكاميرا، نبدأ إعداد مشهد Three.js
+          setupScene();
+        })
+        .catch(err => {
+          log("❌ خطأ في الكاميرا: تأكد من الأذونات. " + err.name);
+        });
 
-        // test camera access
-        navigator.mediaDevices.getUserMedia({ video: true })
-          .then(stream => {
-            log("✅ Camera permission OK");
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            video.autoplay = true;
-            video.playsInline = true;
-            video.style.position = "fixed";
-            video.style.top = 0;
-            video.style.left = 0;
-            video.style.width = "100vw";
-            video.style.height = "100vh";
-            document.body.appendChild(video);
-          })
-          .catch(err => log("❌ Camera error: " + err));
-      } catch (e) {
-        log("❌ JS error: " + e);
+      // 2. إعداد مشهد Three.js (المرئي فوق الكاميرا)
+      function setupScene() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // استخدم 'alpha: true' لجعل الخلفية شفافة لرؤية الكاميرا
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // إضافة إضاءة إلى المشهد
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
+        scene.add(light);
+        
+        // تحميل النموذج ثلاثي الأبعاد
+        loadModel();
+
+        // بدء حلقة الرسوم المتحركة الأساسية
+        animate();
       }
+      
+      // 3. تحميل نموذج GLTF
+      function loadModel() {
+        log("⏳ جارٍ تحميل النموذج...");
+        const loader = new GLTFLoader();
+        
+        // استخدام نموذج Astronaut المعروف
+        loader.load('https://modelviewer.dev/shared-assets/models/Astronaut.glb',
+          gltf => {
+            gltfModel = gltf.scene; // حفظ النموذج في متغير عام
+            gltfModel.scale.set(0.5, 0.5, 0.5);
+            gltfModel.position.set(0, -1, -5); // وضعه بعيدًا مؤقتًا
+            
+            log("✅ النموذج جاهز. انقر لإضافته!");
+            modelLoaded = true;
+            addModelButton.disabled = false; // تفعيل الزر
+          },
+          // دالة التقدم (اختياري)
+          xhr => {
+            const percent = Math.round(xhr.loaded / xhr.total * 100);
+            log(`⏳ جارٍ تحميل النموذج... ${percent}%`);
+          },
+          // دالة الخطأ
+          error => {
+            log("❌ خطأ في تحميل النموذج: " + error);
+          }
+        );
+      }
+      
+      // 4. حلقة الرسوم المتحركة (렌더링)
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        // إذا كان النموذج موجودًا في المشهد، اجعله يدور
+        if (gltfModel && gltfModel.parent === scene) {
+            gltfModel.rotation.y += 0.01;
+        }
+        
+        // عرض المشهد
+        renderer.render(scene, camera);
+      }
+
+      // 5. وظيفة الزر لإضافة النموذج
+      addModelButton.addEventListener('click', () => {
+          if (gltfModel && gltfModel.parent !== scene) {
+              scene.add(gltfModel);
+              log("🚀 تم وضع النموذج في المشهد!");
+              addModelButton.innerText = "إزالة النموذج";
+          } else if (gltfModel && gltfModel.parent === scene) {
+              scene.remove(gltfModel);
+              log("🗑️ تم إزالة النموذج.");
+              addModelButton.innerText = "إضافة نموذج";
+          }
+      });
+      
+      // 6. التعامل مع تغيير حجم النافذة
+      window.addEventListener('resize', () => {
+          if (camera && renderer) {
+              camera.aspect = window.innerWidth / window.innerHeight;
+              camera.updateProjectionMatrix();
+              renderer.setSize(window.innerWidth, window.innerHeight);
+          }
+      });
     </script>
   </body>
 </html>
