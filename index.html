@@ -1,133 +1,179 @@
 <!DOCTYPE html>
 <html lang="ar">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>عرض AR بالكاميرا</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: black; color: white; font-family: sans-serif; }
-    video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: -1; }
-    canvas { position: fixed; top: 0; left: 0; z-index: 1; }
-    #ui { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 10px; }
-    button { background: rgba(0,0,0,0.7); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 16px; cursor: pointer; }
-    #log { position: fixed; top: 10px; left: 10px; font-size: 14px; background: rgba(0,0,0,0.6); padding: 6px 10px; border-radius: 6px; z-index: 20; }
-  </style>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>عرض نموذج ثلاثي الأبعاد مع الكاميرا (AR)</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: black;
+        color: white;
+        font-family: sans-serif;
+      }
+      video {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        z-index: -1;
+      }
+      #ui {
+        position: fixed;
+        bottom: 50px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 10px;
+        z-index: 10;
+      }
+      button {
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 10px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      #log {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        font-size: 14px;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 5px 10px;
+        border-radius: 5px;
+        z-index: 20;
+      }
+    </style>
+    <script type="module">
+      import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js";
+      import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/loaders/GLTFLoader.js";
 
-  <!-- Three.js + GLTFLoader -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/loaders/GLTFLoader.js"></script>
-</head>
-<body>
-  <video id="camera" autoplay playsinline></video>
-  <div id="log">جارٍ تشغيل الكاميرا...</div>
+      const video = document.getElementById("camera");
+      const log = (msg) => (document.getElementById("log").innerText = msg);
+      const addModelButton = document.getElementById("addModel");
 
-  <div id="ui">
-    <button id="addModel" disabled>إضافة نموذج</button>
-  </div>
+      let scene, camera, renderer, model;
+      let modelReady = false;
 
-  <script>
-    const log = msg => document.getElementById("log").innerText = msg;
-    const video = document.getElementById("camera");
-    const addModelButton = document.getElementById("addModel");
-
-    let scene, camera, renderer, model;
-    let modelReady = false;
-
-    // 1️⃣ تشغيل الكاميرا
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        video.srcObject = stream;
-        log("✅ الكاميرا الخلفية بدأت");
-        initThree();
-      } catch (err) {
-        console.warn("فشل الكاميرا الخلفية:", err);
+      // تشغيل الكاميرا
+      async function startCamera() {
         try {
-          const stream2 = await navigator.mediaDevices.getUserMedia({ video: true });
-          video.srcObject = stream2;
-          log("⚠️ تم استخدام الكاميرا الأمامية");
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+          });
+          video.srcObject = stream;
+          log("✅ الكاميرا الخلفية بدأت");
           initThree();
-        } catch (err2) {
-          console.error("Camera error:", err2);
-          log("❌ لا يمكن الوصول للكاميرا: " + (err2?.name || err2?.message || "خطأ غير معروف"));
+        } catch (err) {
+          console.warn("فشل في الكاميرا الخلفية:", err);
+          try {
+            const stream2 = await navigator.mediaDevices.getUserMedia({
+              video: true,
+            });
+            video.srcObject = stream2;
+            log("⚠️ تم استخدام الكاميرا الأمامية");
+            initThree();
+          } catch (err2) {
+            console.error("Camera error:", err2);
+            log("❌ لا يمكن الوصول للكاميرا: " + (err2?.name || err2?.message));
+          }
         }
       }
-    }
 
-    startCamera();
+      startCamera();
 
-    // 2️⃣ إعداد Three.js
-    function initThree() {
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
-      camera.position.set(0, 0, 2);
+      // إعداد مشهد Three.js
+      function initThree() {
+        scene = new THREE.Scene();
 
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setClearColor(0x000000, 0); // خلفية شفافة
-      document.body.appendChild(renderer.domElement);
+        camera = new THREE.PerspectiveCamera(
+          70,
+          window.innerWidth / window.innerHeight,
+          0.01,
+          100
+        );
+        camera.position.set(0, 0, 2);
 
-      const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
-      scene.add(light);
-
-      loadModel();
-      animate();
-
-      window.addEventListener("resize", () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-    }
+        renderer.setClearColor(0x000000, 0);
+        document.body.appendChild(renderer.domElement);
 
-    // 3️⃣ تحميل النموذج
-    function loadModel() {
-      log("⏳ جارٍ تحميل النموذج...");
-      const loader = new THREE.GLTFLoader();
-      loader.load(
-        "https://modelviewer.dev/shared-assets/models/Astronaut.glb",
-        gltf => {
-          model = gltf.scene;
-          model.scale.set(0.5, 0.5, 0.5);
-          model.position.set(0, -1, -3);
-          modelReady = true;
-          addModelButton.disabled = false;
-          log("✅ النموذج جاهز. اضغط لإضافته!");
-        },
-        xhr => {
-          const percent = xhr.total ? Math.round((xhr.loaded / xhr.total) * 100) : "??";
-          log(`⏳ تحميل النموذج... ${percent}%`);
-        },
-        err => {
-          console.error("خطأ تحميل النموذج:", err);
-          log("❌ فشل تحميل النموذج.");
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
+        scene.add(light);
+
+        loadModel();
+        animate();
+
+        window.addEventListener("resize", () => {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+      }
+
+      // تحميل النموذج ثلاثي الأبعاد
+      function loadModel() {
+        const loader = new GLTFLoader();
+        log("⏳ جارٍ تحميل النموذج...");
+
+        loader.load(
+          "https://modelviewer.dev/shared-assets/models/Astronaut.glb", // نموذج جاهز عبر الإنترنت
+          (gltf) => {
+            model = gltf.scene;
+            model.scale.set(0.5, 0.5, 0.5);
+            model.position.set(0, -1, -3);
+            modelReady = true;
+            addModelButton.disabled = false;
+            log("✅ النموذج جاهز. اضغط لإضافته!");
+          },
+          (xhr) => {
+            const percent = xhr.total
+              ? Math.round((xhr.loaded / xhr.total) * 100)
+              : "??";
+            log(`⏳ تحميل النموذج... ${percent}%`);
+          },
+          (err) => {
+            console.error("خطأ في تحميل النموذج:", err);
+            log("❌ خطأ في تحميل النموذج.");
+          }
+        );
+      }
+
+      // حلقة التحريك
+      function animate() {
+        requestAnimationFrame(animate);
+        if (model && model.parent === scene) model.rotation.y += 0.01;
+        renderer.render(scene, camera);
+      }
+
+      // زر الإضافة/الإزالة
+      addModelButton.addEventListener("click", () => {
+        if (!modelReady) return;
+        if (model.parent === scene) {
+          scene.remove(model);
+          addModelButton.innerText = "إضافة نموذج";
+          log("🗑️ تم إزالة النموذج");
+        } else {
+          scene.add(model);
+          addModelButton.innerText = "إزالة النموذج";
+          log("🚀 تم وضع النموذج في المشهد!");
         }
-      );
-    }
+      });
+    </script>
+  </head>
 
-    // 4️⃣ حلقة التحريك
-    function animate() {
-      requestAnimationFrame(animate);
-      if (model && model.parent === scene) {
-        model.rotation.y += 0.01;
-      }
-      renderer.render(scene, camera);
-    }
-
-    // 5️⃣ زر الإضافة / الإزالة
-    addModelButton.addEventListener("click", () => {
-      if (!modelReady) return;
-      if (model.parent === scene) {
-        scene.remove(model);
-        addModelButton.innerText = "إضافة نموذج";
-        log("🗑️ تم إزالة النموذج");
-      } else {
-        scene.add(model);
-        addModelButton.innerText = "إزالة النموذج";
-        log("🚀 تم وضع النموذج في المشهد!");
-      }
-    });
-  </script>
-</body>
+  <body>
+    <video id="camera" autoplay playsinline></video>
+    <div id="log">جار التهيئة...</div>
+    <div id="ui">
+      <button id="addModel" disabled>إضافة نموذج</button>
+    </div>
+  </body>
 </html>
-
